@@ -79,11 +79,52 @@ const char *file_paths[] = {
     "/mnt/usb2/PS5/Linux/", "/mnt/usb3/PS5/Linux/",
 };
 
+long find_and_get_size_of_file(const char *filename, char *found_path);
+int find_and_read_file(const char *filename, void *buf, size_t bufsize);
+
+static const char *get_overridden_filename(const char *filename) {
+  static int state = 0;
+  static char *overrides_start = nullptr;
+  static char *overrides_end = nullptr;
+
+  if (state == 0) {
+    state = 1;
+    char found_path[256];
+    ssize_t size = find_and_get_size_of_file("path-override.txt", found_path);
+    if (size > 0) {
+      overrides_start = malloc(size + 1);
+      overrides_end = overrides_start + size + 1;
+      if (read_file(found_path, overrides_start, size) == size) {
+        state = 2;
+        for (char *p = overrides_start; p < overrides_end; p++)
+          if (*p == '\n')
+            *p = 0;
+        overrides_start[size] = 0; // make sure the last string is null-terminated
+      }
+    }
+  }
+
+  if (state == 1) // overrides not found, or unreadable, or currently looking for it
+    return filename;
+
+  size_t needle_len = strlen(filename);
+  for (const char *p = overrides_start; p < overrides_end;) {
+    size_t haystack_len = strlen(p);
+    if (haystack_len > needle_len && !strncmp(p, filename, needle_len) && p[needle_len] == '=')
+      return p + needle_len + 1;
+    p += haystack_len + 1;
+  }
+
+  // haven't found an override, return original filename
+  return filename;
+}
+
 long find_and_get_size_of_file(const char *filename, char *found_path) {
 
   char full_path[256];
   struct stat st;
 
+  filename = get_overridden_filename(filename);
   int num_paths = sizeof(file_paths) / sizeof(file_paths[0]);
 
   for (int i = 0; i < num_paths; i++) {
