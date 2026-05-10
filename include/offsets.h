@@ -35,6 +35,8 @@ typedef struct _offset_list {
   uint64_t KERNEL_UART_OVERRIDE;
   uint64_t KERNEL_DEBUG_PATCH;
   uint64_t KERNEL_CFI_CHECK;
+  uint64_t PS5_WIFI_FW_OFFSET;
+  uint64_t PS5_WIFI_FW_SIZE;
 } offset_list;
 
 extern offset_list off_0300;

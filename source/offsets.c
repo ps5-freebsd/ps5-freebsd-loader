@@ -30,6 +30,8 @@ offset_list off_0300 = {
     .KERNEL_UART_OVERRIDE = 0x1EB0258,
     .KERNEL_DEBUG_PATCH = 0x0752460,
     .KERNEL_CFI_CHECK = 0x0441DD0,
+    .PS5_WIFI_FW_OFFSET = 0x1274460,
+    .PS5_WIFI_FW_SIZE = 492304,
 };
 
 offset_list off_0310 = {
@@ -62,6 +64,8 @@ offset_list off_0310 = {
     .KERNEL_UART_OVERRIDE = 0x1EB0258,
     .KERNEL_DEBUG_PATCH = 0x07524A0,
     .KERNEL_CFI_CHECK = 0x0441E10,
+    .PS5_WIFI_FW_OFFSET = 0x1274490,
+    .PS5_WIFI_FW_SIZE = 492304,
 };
 
 offset_list off_0320 = {
@@ -94,6 +98,8 @@ offset_list off_0320 = {
     .KERNEL_UART_OVERRIDE = 0x1EB0258,
     .KERNEL_DEBUG_PATCH = 0x7527F0,
     .KERNEL_CFI_CHECK = 0x442160,
+    .PS5_WIFI_FW_OFFSET = 0x1274550,
+    .PS5_WIFI_FW_SIZE = 492304,
 };
 
 offset_list off_0321 = {
@@ -126,6 +132,8 @@ offset_list off_0321 = {
     .KERNEL_UART_OVERRIDE = 0x1EB0258,
     .KERNEL_DEBUG_PATCH = 0x7527F0,
     .KERNEL_CFI_CHECK = 0x442160,
+    .PS5_WIFI_FW_OFFSET = 0x1274550,
+    .PS5_WIFI_FW_SIZE = 492304,
 };
 
 offset_list off_0400 = {
@@ -158,6 +166,8 @@ offset_list off_0400 = {
     .KERNEL_UART_OVERRIDE = 0x1F522A8,
     .KERNEL_DEBUG_PATCH = 0x77DA70,
     .KERNEL_CFI_CHECK = 0x45A170,
+    .PS5_WIFI_FW_OFFSET = 0x1392FB0,
+    .PS5_WIFI_FW_SIZE = 493000,
 };
 
 offset_list off_0402 = {
@@ -190,6 +200,8 @@ offset_list off_0402 = {
     .KERNEL_UART_OVERRIDE = 0x1F522A8,
     .KERNEL_DEBUG_PATCH = 0x77DAC0,
     .KERNEL_CFI_CHECK = 0x45A170,
+    .PS5_WIFI_FW_OFFSET = 0x1392FB0,
+    .PS5_WIFI_FW_SIZE = 493000,
 };
 
 offset_list off_0403 = {
@@ -222,6 +234,8 @@ offset_list off_0403 = {
     .KERNEL_UART_OVERRIDE = 0x1F522A8,
     .KERNEL_DEBUG_PATCH = 0x77DB50,
     .KERNEL_CFI_CHECK = 0x45A170,
+    .PS5_WIFI_FW_OFFSET = 0x1392FB0,
+    .PS5_WIFI_FW_SIZE = 493000,
 };
 
 offset_list off_0450 = {
@@ -254,6 +268,8 @@ offset_list off_0450 = {
     .KERNEL_UART_OVERRIDE = 0x1F522A8,
     .KERNEL_DEBUG_PATCH = 0x77DC80,
     .KERNEL_CFI_CHECK = 0x45A1A0,
+    .PS5_WIFI_FW_OFFSET = 0x1392FC0,
+    .PS5_WIFI_FW_SIZE = 493000,
 };
 
 offset_list off_0451 = {
@@ -286,4 +302,6 @@ offset_list off_0451 = {
     .KERNEL_UART_OVERRIDE = 0x1F522A8,
     .KERNEL_DEBUG_PATCH = 0x77DC90,
     .KERNEL_CFI_CHECK = 0x45A1A0,
+    .PS5_WIFI_FW_OFFSET = 0x1393000,
+    .PS5_WIFI_FW_SIZE = 493000,
 };

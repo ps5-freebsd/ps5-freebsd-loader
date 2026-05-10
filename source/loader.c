@@ -1,5 +1,6 @@
 #include "loader.h"
 #include "config.h"
+#include "firmware.h"
 #include "utils.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -226,6 +227,9 @@ int fetch_linux(struct linux_info *info) {
     notify("Something went wrong while reading initrd - Aborting\n");
     return -1;
   }
+
+  if (resolve_device_firmwares(&initrd, &initrd_size) < 0)
+    return -1;
 
   size_t vram_size;
   char buf_vram[16] = {};

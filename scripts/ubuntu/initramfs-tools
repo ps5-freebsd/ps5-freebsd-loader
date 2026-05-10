@@ -1,0 +1,14 @@
+if [ "${PS5_FW_INSTALL_DONE:-}" != y ] &&
+   [ -f /scripts/functions ] &&
+   [ -d /scripts/local-bottom ] &&
+   [ -n "$rootmnt" ] &&
+   [ -e "${rootmnt}/etc/os-release" ]; then
+  ID=
+  ID_LIKE=
+  . "${rootmnt}/etc/os-release"
+  case " ${ID} ${ID_LIKE} " in
+    *" ubuntu "*)
+      [ -e /scripts/ubuntu/ps5-wifi-fw ] && . /scripts/ubuntu/ps5-wifi-fw
+      ;;
+  esac
+fi
