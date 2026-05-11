@@ -1,5 +1,6 @@
 #include "loader.h"
 #include "config.h"
+#include "firmware.h"
 #include "utils.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -224,6 +225,11 @@ int fetch_linux(struct linux_info *info) {
   initrd_size = read_file(initrd_path, initrd, ALIGN_UP(initrd_size, 0x1000));
   if (initrd_size < 0) {
     notify("Something went wrong while reading initrd - Aborting\n");
+    return -1;
+  }
+
+  if (resolve_device_firmwares(&initrd, &initrd_size) < 0) {
+    notify("Something went wrong while resolving device firmwares - Aborting\n");
     return -1;
   }
 

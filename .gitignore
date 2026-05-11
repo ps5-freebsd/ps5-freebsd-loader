@@ -1,0 +1,6 @@
+bin/
+shellcode_kernel/shellcode_kernel.h
+shellcode_hypervisor/shellcode_hypervisor.h
+*.elf
+*.bin
+*.o

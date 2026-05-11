@@ -24,6 +24,8 @@ $(SC_HV_H):
 $(SC_K_H):
 	$(MAKE) -C shellcode_kernel
 
+source/firmware.o: scripts/ubuntu/initramfs-tools scripts/ubuntu/ps5-wifi-fw
+
 $(OBJS): %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 

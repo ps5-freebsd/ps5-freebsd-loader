@@ -1,0 +1,13 @@
+if [ "${PS5_FW_INSTALL_DONE:-}" != y ]; then
+  FW_PATH="usr/lib/firmware/nxp/pcieuartiw620_combo_v1.bin"
+  FW_SRC="/${FW_PATH}"
+  FW_DST="${rootmnt}/${FW_PATH}"
+  if [ -n "$rootmnt" ] && [ -f "$FW_SRC" ]; then
+    mkdir -p "${FW_DST%/*}"
+    cp "$FW_SRC" "$FW_DST"
+    chmod 0644 "$FW_DST"
+    PS5_FW_INSTALL_DONE=y
+    export PS5_FW_INSTALL_DONE
+    [ -e /dev/kmsg ] && printf 'ps5-fw-install: installed %s\n' "$FW_DST" > /dev/kmsg || true
+  fi
+fi
