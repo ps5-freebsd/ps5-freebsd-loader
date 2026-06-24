@@ -1,6 +1,6 @@
-#include "boot_linux.h"
+#include "boot_freebsd.h"
 #include "../include/config.h"
-#include "../include/linux.h"
+#include "../include/freebsd.h"
 #include "../shellcode_hv/shellcode_hv.h"
 #include "utils.h"
 
@@ -28,7 +28,7 @@ typedef struct {
   uint8_t reserved[64];
 } __attribute__((packed)) SceSblHvShm;
 
-static struct linux_info info;
+static struct freebsd_info info;
 
 static int mp3_req[1281], mp3_rsp[1282];
 
@@ -124,7 +124,7 @@ void patch_hv(void) {
          sizeof(shellcode_identity_and_jmp));
 }
 
-void boot_linux(void) {
+void boot_freebsd(void) {
   patch_hv();
 
   // Common bootloader code
@@ -137,8 +137,8 @@ void boot_linux(void) {
   mp3_set_hdcp_packet(0, 1);
   mp3_enable_output(0, 1);
 
-  // Copy bzImage and initrd into contiguous memory.
-  memcpy(&info, (void *)args.linux_info_va, sizeof(struct linux_info));
+  // Copy the staged FreeBSD kernel and kenv into contiguous HV memory.
+  memcpy(&info, (void *)args.freebsd_info_va, sizeof(struct freebsd_info));
 
   info.n_tmrs = 0;
   if (args.fw_version >= 0x0500 && args.fw_version < 0x0650) {
@@ -154,15 +154,14 @@ void boot_linux(void) {
     }
   }
 
-  uintptr_t bzimage = info.bzimage;
-  uintptr_t initrd = info.initrd;
+  uintptr_t kernel = info.kernel;
+  uintptr_t env = info.env;
 
-  info.bzimage = cave_bzImage;
-  info.initrd = cave_bzImage + ALIGN_UP(info.bzimage_size, PAGE_SIZE);
+  info.kernel = cave_freebsd_kernel;
+  info.env = cave_freebsd_kernel + ALIGN_UP(info.kernel_size, PAGE_SIZE);
 
-  memcpy((void *)PHYS_TO_DMAP(cave_linux_info), &info,
-         sizeof(struct linux_info));
-  memcpy((void *)PHYS_TO_DMAP(info.bzimage), (void *)bzimage,
-         info.bzimage_size);
-  memcpy((void *)PHYS_TO_DMAP(info.initrd), (void *)initrd, info.initrd_size);
+  memcpy((void *)PHYS_TO_DMAP(cave_freebsd_info), &info,
+         sizeof(struct freebsd_info));
+  memcpy((void *)PHYS_TO_DMAP(info.kernel), (void *)kernel, info.kernel_size);
+  memcpy((void *)PHYS_TO_DMAP(info.env), (void *)env, info.env_size + 1);
 }

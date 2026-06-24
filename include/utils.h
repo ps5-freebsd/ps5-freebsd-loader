@@ -1,7 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "linux.h"
+#include "freebsd.h"
 #include "offsets.h"
 #include <ps5/kernel.h>
 #include <stdarg.h>
@@ -43,7 +43,7 @@ extern uint64_t dmap;             // Defined on utils.c
 extern uint64_t cr3;              // Defined on utils.c
 extern uint32_t fw;               // Defined on utils.c
 extern uint64_t vmcb_pa[16];      // Defined on hv_defeat.c
-extern struct linux_info linux_i; // Declared on main.c
+extern struct freebsd_info freebsd_i; // Declared on utils.c
 
 int setup_env(void);
 

@@ -1,5 +1,5 @@
 #include "main.h"
-#include "boot_linux.h"
+#include "boot_freebsd.h"
 #include "hv_defeat_0304.h"
 #include "utils.h"
 #include <stddef.h>
@@ -40,8 +40,8 @@ __attribute__((section(".entry_point"))) uint32_t main(uint64_t add1,
   // Disable CFI to allow smp_rendezvous.
   *(uint8_t *)args_ptr->kernel_cfi_check = 0xC3;
 
-  boot_linux();
-  printf("Linux prepared OK\n");
+  boot_freebsd();
+  printf("FreeBSD prepared OK\n");
 
   printf("Good Bye VM :)\n");
   smp_rendezvous(smp_no_rendevous_barrier, vmmcall_dummy,

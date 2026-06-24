@@ -42,7 +42,9 @@
 
 #define MAXCPU 16
 
+#define ALIGN_UP(size, align) (((size) + (align) - 1) & ~((align) - 1))
+
 void entry(void);
-void boot_linux(void);
+void boot_freebsd(void);
 
 enum kit_type { KIT_RETAIL, KIT_TESTKIT, KIT_DEVKIT };

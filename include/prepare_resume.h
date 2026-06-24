@@ -2,7 +2,7 @@
 #define PREPARE_RESUME_H
 #include "utils.h"
 
-extern struct linux_info linux_i;
+extern struct freebsd_info freebsd_i;
 
 int prepare_resume(void **shellcode_kernel, size_t *shellcode_kernel_len);
 uint64_t prepare_sck_args(void);

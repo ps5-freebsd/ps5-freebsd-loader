@@ -1,6 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
-#include "boot_linux.h"
+#include "boot_freebsd.h"
 #include "shellcode_kernel_args.h"
 
 extern void (*printf)(const char *format, ...);

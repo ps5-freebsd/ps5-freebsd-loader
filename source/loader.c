@@ -1,18 +1,25 @@
 #include "loader.h"
 #include "config.h"
 #include "firmware.h"
-#include "linux.h"
+#include "freebsd.h"
 #include "utils.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 const char *file_paths[] = {
-    "/mnt/usb0/",           "/mnt/usb1/",           "/mnt/usb2/",
-    "/mnt/usb3/",           "/mnt/usb0/PS5/Linux/", "/mnt/usb1/PS5/Linux/",
-    "/mnt/usb2/PS5/Linux/", "/mnt/usb3/PS5/Linux/",
+    "/mnt/usb0/",
+    "/mnt/usb1/",
+    "/mnt/usb2/",
+    "/mnt/usb3/",
+    "/mnt/usb0/PS5/FreeBSD/",
+    "/mnt/usb1/PS5/FreeBSD/",
+    "/mnt/usb2/PS5/FreeBSD/",
+    "/mnt/usb3/PS5/FreeBSD/",
 };
 
 long find_and_get_size_of_file(const char *filename, char *found_path);
@@ -82,6 +89,7 @@ int find_and_read_file(const char *filename, void *buf, size_t bufsize) {
   char full_path[256];
   struct stat st;
 
+  filename = get_overridden_filename(filename);
   int num_paths = sizeof(file_paths) / sizeof(file_paths[0]);
 
   for (int i = 0; i < num_paths; i++) {
@@ -115,56 +123,200 @@ void trim_newline(char *s) {
   }
 }
 
-int fetch_linux(struct linux_info *info) {
-  char bzimage_path[256];
-  char initrd_path[256];
+static uint64_t freebsd_phdr_pa(const Elf64_Phdr *phdr) {
+  if (phdr->p_paddr != 0 && phdr->p_paddr < 0x100000000ULL)
+    return phdr->p_paddr;
+  if (phdr->p_vaddr >= FREEBSD_KERNBASE)
+    return phdr->p_vaddr - FREEBSD_KERNBASE;
+  return UINT64_MAX;
+}
 
-  size_t bzimage_size = find_and_get_size_of_file("bzImage", bzimage_path);
-  if (bzimage_size < 0) {
-    notify("File bzImage not found at default paths - Aborting\n");
+static int validate_freebsd_kernel(void *kernel, size_t kernel_size,
+                                   struct freebsd_info *info) {
+  if (kernel_size < sizeof(Elf64_Ehdr)) {
+    notify("FreeBSD kernel is too small for an ELF header - Aborting\n");
     return -1;
   }
 
-  void *bzimage =
-      mmap(NULL, ALIGN_UP(bzimage_size, PAGE_SIZE), PROT_READ | PROT_WRITE,
-           MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  if (bzimage == MAP_FAILED) {
-    notify("[-] Error could not allocate bzimage.\n");
+  Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel;
+  if (ehdr->e_ident[0] != 0x7f || ehdr->e_ident[1] != 'E' ||
+      ehdr->e_ident[2] != 'L' || ehdr->e_ident[3] != 'F' ||
+      ehdr->e_ident[FREEBSD_EI_CLASS] != FREEBSD_ELFCLASS64 ||
+      ehdr->e_ident[FREEBSD_EI_DATA] != FREEBSD_ELFDATA2LSB ||
+      ehdr->e_type != FREEBSD_ET_EXEC ||
+      ehdr->e_machine != FREEBSD_EM_X86_64 ||
+      ehdr->e_ehsize != sizeof(Elf64_Ehdr) ||
+      ehdr->e_phentsize != sizeof(Elf64_Phdr) || ehdr->e_phnum == 0) {
+    notify("FreeBSD kernel is not an amd64 ELF64 ET_EXEC kernel - Aborting\n");
     return -1;
   }
 
-  bzimage_size =
-      read_file(bzimage_path, bzimage, ALIGN_UP(bzimage_size, PAGE_SIZE));
-  if (bzimage_size < 0) {
-    notify("Something went wrong while reading bzImage - Aborting\n");
+  uint64_t phdr_bytes = (uint64_t)ehdr->e_phnum * sizeof(Elf64_Phdr);
+  if (ehdr->e_phoff > kernel_size || phdr_bytes > kernel_size - ehdr->e_phoff) {
+    notify("FreeBSD kernel program headers are outside the file - Aborting\n");
     return -1;
   }
 
-  size_t initrd_size = find_and_get_size_of_file("initrd.img", initrd_path);
-  if (bzimage_size < 0) {
-    notify("File bzImage not found at default paths - Aborting\n");
+  if (ehdr->e_entry < FREEBSD_KERNSTART) {
+    notify("FreeBSD kernel entry is below KERNSTART - Aborting\n");
     return -1;
   }
 
-  void *initrd =
-      mmap(NULL, ALIGN_UP(initrd_size, PAGE_SIZE), PROT_READ | PROT_WRITE,
-           MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  if (initrd == MAP_FAILED) {
-    notify("[-] Error could not allocate initrd.\n");
+  Elf64_Phdr *phdr = (Elf64_Phdr *)((char *)kernel + ehdr->e_phoff);
+  uint64_t first_pa = UINT64_MAX;
+  uint64_t last_pa = 0;
+  int load_segments = 0;
+
+  for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+    if (phdr[i].p_type != FREEBSD_PT_LOAD)
+      continue;
+    if (phdr[i].p_memsz < phdr[i].p_filesz ||
+        phdr[i].p_offset > kernel_size ||
+        phdr[i].p_filesz > kernel_size - phdr[i].p_offset) {
+      notify("FreeBSD kernel has a malformed PT_LOAD segment - Aborting\n");
+      return -1;
+    }
+
+    uint64_t pa = freebsd_phdr_pa(&phdr[i]);
+    if (pa == UINT64_MAX || phdr[i].p_memsz > 0x100000000ULL - pa) {
+      notify("FreeBSD kernel PT_LOAD segment is not below 4GB - Aborting\n");
+      return -1;
+    }
+
+    if (pa < first_pa)
+      first_pa = pa;
+    if (pa + phdr[i].p_memsz > last_pa)
+      last_pa = pa + phdr[i].p_memsz;
+    load_segments++;
+  }
+
+  if (load_segments == 0 || first_pa != FREEBSD_KERNLOAD) {
+    notify("FreeBSD kernel does not load at amd64 KERNLOAD - Aborting\n");
     return -1;
   }
 
-  initrd_size =
-      read_file(initrd_path, initrd, ALIGN_UP(initrd_size, PAGE_SIZE));
-  if (initrd_size < 0) {
-    notify("Something went wrong while reading initrd - Aborting\n");
+  info->entry = ehdr->e_entry;
+  info->first_pa = first_pa;
+  info->last_pa = last_pa;
+  return 0;
+}
+
+static int append_kenv(char *env, size_t *env_size, const char *line,
+                       size_t line_len) {
+  while (line_len > 0 && (line[line_len - 1] == '\r' ||
+                          line[line_len - 1] == '\n' ||
+                          line[line_len - 1] == ' ' ||
+                          line[line_len - 1] == '\t')) {
+    line_len--;
+  }
+  while (line_len > 0 && (*line == ' ' || *line == '\t')) {
+    line++;
+    line_len--;
+  }
+
+  if (line_len == 0 || line[0] == '#')
+    return 0;
+
+  int has_equals = 0;
+  for (size_t i = 0; i < line_len; i++) {
+    if (line[i] == '=') {
+      has_equals = 1;
+      break;
+    }
+  }
+  if (!has_equals)
+    return 0;
+
+  if (*env_size + line_len + 2 > FREEBSD_ENV_MAX)
+    return -1;
+
+  memcpy(env + *env_size, line, line_len);
+  *env_size += line_len;
+  env[(*env_size)++] = '\0';
+  env[*env_size] = '\0';
+  return 0;
+}
+
+static int build_kenv(char *env, size_t *env_size, size_t vram_size,
+                      int kit_type) {
+  *env_size = 0;
+
+  char default_line[96];
+  int len = snprintf(default_line, sizeof(default_line),
+                     "hw.ps5.vram_size=0x%zx", vram_size);
+  if (len <= 0 ||
+      append_kenv(env, env_size, default_line, (size_t)len) != 0)
+    return -1;
+
+  len = snprintf(default_line, sizeof(default_line), "hw.ps5.kit_type=%d",
+                 kit_type);
+  if (len <= 0 ||
+      append_kenv(env, env_size, default_line, (size_t)len) != 0)
+    return -1;
+
+  const char loader_name[] = "hw.ps5.loader=ps5-freebsd-loader";
+  if (append_kenv(env, env_size, loader_name, sizeof(loader_name) - 1) != 0)
+    return -1;
+
+  char kenv_path[256];
+  long kenv_file_size = find_and_get_size_of_file("kenv.txt", kenv_path);
+  if (kenv_file_size <= 0)
+    return 0;
+
+  char *kenv_file = malloc((size_t)kenv_file_size + 1);
+  if (kenv_file == NULL)
+    return -1;
+  int read_size = read_file(kenv_path, kenv_file, (size_t)kenv_file_size);
+  if (read_size < 0) {
+    free(kenv_file);
+    return -1;
+  }
+  kenv_file[read_size] = '\0';
+
+  char *line = kenv_file;
+  for (int i = 0; i <= read_size; i++) {
+    if (kenv_file[i] != '\n' && kenv_file[i] != '\0')
+      continue;
+    if (append_kenv(env, env_size, line, (size_t)(&kenv_file[i] - line)) !=
+        0) {
+      free(kenv_file);
+      return -1;
+    }
+    line = &kenv_file[i + 1];
+  }
+
+  free(kenv_file);
+  return 0;
+}
+
+int fetch_freebsd(struct freebsd_info *info) {
+  char kernel_path[256];
+
+  long kernel_file_size = find_and_get_size_of_file("kernel", kernel_path);
+  if (kernel_file_size < 0) {
+    notify("File kernel not found at default FreeBSD paths - Aborting\n");
     return -1;
   }
 
-  if (dump_device_firmwares(initrd_path) < 0) {
-    notify(
-        "Something went wrong while dumping device firmwares - Continuing\n");
+  void *kernel =
+      mmap(NULL, ALIGN_UP((size_t)kernel_file_size, PAGE_SIZE),
+           PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (kernel == MAP_FAILED) {
+    notify("[-] Error could not allocate FreeBSD kernel buffer.\n");
+    return -1;
   }
+
+  int kernel_size =
+      read_file(kernel_path, kernel, ALIGN_UP((size_t)kernel_file_size,
+                                             PAGE_SIZE));
+  if (kernel_size < 0) {
+    notify("Something went wrong while reading FreeBSD kernel - Aborting\n");
+    return -1;
+  }
+
+  memset(info, 0, sizeof(*info));
+  if (validate_freebsd_kernel(kernel, (size_t)kernel_size, info) != 0)
+    return -1;
 
   size_t vram_size;
   char buf_vram[16] = {};
@@ -183,38 +335,54 @@ int fetch_linux(struct linux_info *info) {
     }
   }
 
-  char cmdline[2048] = {};
-  ret = find_and_read_file("cmdline.txt", cmdline, sizeof(cmdline) - 1);
-  if (ret < 0) {
-    printf("File cmdline.txt not found at default paths - Using static "
-           "fallback\n");
-    strcpy(cmdline, CMD_LINE);
-  } else {
-    trim_newline(cmdline);
+  int kit_type = (int)get_kit_type();
+
+  char *env =
+      mmap(NULL, ALIGN_UP(FREEBSD_ENV_MAX, PAGE_SIZE), PROT_READ | PROT_WRITE,
+           MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (env == MAP_FAILED) {
+    notify("[-] Error could not allocate FreeBSD environment buffer.\n");
+    return -1;
   }
 
-  info->linux_info = kernel_cave_linux_info;
-  info->bzimage = kernel_cave_bzImage;
-  info->bzimage_size = bzimage_size;
-  info->initrd = kernel_cave_bzImage + ALIGN_UP(bzimage_size, PAGE_SIZE);
-  info->initrd_size = initrd_size;
+  size_t env_size;
+  if (build_kenv(env, &env_size, vram_size, kit_type) != 0) {
+    notify("Something went wrong while building FreeBSD kenv - Aborting\n");
+    return -1;
+  }
+
+  info->freebsd_info = kernel_cave_freebsd_info;
+  info->kernel = kernel_cave_freebsd_kernel;
+  info->kernel_size = (size_t)kernel_size;
+  info->env = kernel_cave_freebsd_kernel + ALIGN_UP((size_t)kernel_size,
+                                                    PAGE_SIZE);
+  info->env_size = env_size;
+  info->modulep = ALIGN_UP(info->last_pa, FREEBSD_X86_PAGE_SIZE);
+  info->kernend_pa = ALIGN_UP(info->modulep + FREEBSD_METADATA_MAX +
+                                  info->env_size,
+                              FREEBSD_X86_PAGE_SIZE);
+  if (info->modulep > UINT32_MAX || info->kernend_pa > UINT32_MAX) {
+    notify("FreeBSD kernel plus metadata does not fit below 4GB - Aborting\n");
+    return -1;
+  }
+  info->kernend = info->kernend_pa - info->first_pa;
   info->vram_size = vram_size;
-  info->kit_type = (int)get_kit_type();
-  strcpy(info->cmdline, cmdline);
+  info->kit_type = kit_type;
 
   uint64_t page = alloc_page();
-  kwrite(pa_to_dmap(page), info, sizeof(struct linux_info));
-  install_page_syscore(kernel_cave_linux_info, page, 0);
+  kwrite(pa_to_dmap(page), info, sizeof(struct freebsd_info));
+  install_page_syscore(kernel_cave_freebsd_info, page, 0);
 
-  for (int i = 0; i < bzimage_size; i += PAGE_SIZE) {
-    install_page_syscore(info->bzimage + i,
-                         vtophys_user((uintptr_t)bzimage + i), 0);
+  for (size_t i = 0; i < (size_t)kernel_size; i += PAGE_SIZE) {
+    install_page_syscore(info->kernel + i,
+                         vtophys_user((uintptr_t)kernel + i), 0);
   }
 
-  for (int i = 0; i < initrd_size; i += PAGE_SIZE) {
-    install_page_syscore(info->initrd + i, vtophys_user((uintptr_t)initrd + i),
-                         0);
+  for (size_t i = 0; i < env_size + 1; i += PAGE_SIZE) {
+    install_page_syscore(info->env + i, vtophys_user((uintptr_t)env + i), 0);
   }
 
+  notify("FreeBSD kernel staged. entry=%lx modulep=%lx kernend=%lx\n",
+         info->entry, info->modulep, info->kernend);
   return 0;
 }

@@ -1,5 +1,5 @@
-#ifndef BOOT_LINUX_H
-#define BOOT_LINUX_H
+#ifndef BOOT_FREEBSD_H
+#define BOOT_FREEBSD_H
 
 #include <stdint.h>
 
@@ -7,7 +7,7 @@
 
 static int dp_enable_link_phy(int lanenum, int linkrate);
 static void install_hv_code(void);
-void boot_linux(void);
+void boot_freebsd(void);
 
 extern int (*transmitter_control)(int cmd, void *control);
 extern int (*mp3_initialize)(int vmid);

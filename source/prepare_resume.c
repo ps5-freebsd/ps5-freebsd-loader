@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 int remove_xotext(void) {
   uint64_t start = ktext;
@@ -142,7 +143,7 @@ uint64_t prepare_sck_args(void) {
   args.hv_handle_vmexit_pa = env_offset.HV_HANDLE_VMEXIT_PA;
   args.hv_code_cave_pa = env_offset.HV_CODE_CAVE_PA;
 
-  args.linux_info_va = linux_i.linux_info;
+  args.freebsd_info_va = freebsd_i.freebsd_info;
 
   uint64_t args_cave = pa_to_dmap(alloc_page());
   kernel_copyin(&args, args_cave, sizeof(args));

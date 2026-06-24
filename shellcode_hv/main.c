@@ -1,5 +1,5 @@
 #include "../include/config.h"
-#include "boot_linux.h"
+#include "boot_freebsd.h"
 #include "utils.h"
 
 __attribute__((section(".entry_point"), naked)) uint32_t main(void) {
@@ -14,7 +14,7 @@ __attribute__((section(".entry_point"), naked)) uint32_t main(void) {
 
   cpu_id = (ebx >> 24) & 0xFF;
 
-  // We point to a location after the main linux boot code
+  // We point to a location after the main FreeBSD boot code
   // Each CPU should have a different location
   uintptr_t new_rsp =
       (uintptr_t)hv_base_rsp + ((uint64_t)(cpu_id)*hv_stack_size);

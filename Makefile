@@ -6,7 +6,7 @@ endif
 
 include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
 
-BIN := bin/ps5-linux-loader.elf
+BIN := bin/ps5-freebsd-loader.elf
 SRC := $(wildcard source/*.c)
 OBJS := $(SRC:.c=.o)
 

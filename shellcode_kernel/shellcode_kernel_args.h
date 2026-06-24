@@ -22,7 +22,7 @@ typedef struct {
   uint64_t kernel_cfi_check;
   uint64_t hv_handle_vmexit_pa;
   uint64_t hv_code_cave_pa;
-  uint64_t linux_info_va; // To relocate by kernel shellcode
+  uint64_t freebsd_info_va; // To relocate by kernel shellcode
 } shellcode_kernel_args;
 
 extern shellcode_kernel_args args; // Declared on main.c

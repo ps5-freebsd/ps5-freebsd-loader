@@ -1,11 +1,12 @@
 #include "utils.h"
-#include "linux.h"
+#include "freebsd.h"
 #include "offsets.h"
 #include <stdio.h>
 #include <sys/cpuset.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 /* Global Variables */
 offset_list env_offset;
@@ -14,11 +15,11 @@ uint64_t kdata;
 uint64_t dmap;
 uint64_t cr3;
 uint32_t fw;
-struct linux_info linux_i;
+struct freebsd_info freebsd_i;
 
 int setup_env(void) {
-  notify("Welcome to ps5-linux-loader. We'll defeat HV and prepare the system "
-         "to boot Linux on sleep resume.\n");
+  notify("Welcome to ps5-freebsd-loader. We'll defeat HV and prepare the "
+         "system to boot FreeBSD on sleep resume.\n");
   if (set_offsets())
     return -1;
   if (init_global_vars())
