@@ -36,8 +36,9 @@ static const char *get_overridden_filename(const char *filename) {
     ssize_t size = find_and_get_size_of_file("path-override.txt", found_path);
     if (size > 0) {
       overrides_start = malloc(size + 1);
-      overrides_end = overrides_start + size + 1;
-      if (read_file(found_path, overrides_start, size) == size) {
+      if (overrides_start != NULL &&
+          read_file(found_path, overrides_start, size) == size) {
+        overrides_end = overrides_start + size + 1;
         state = 2;
         for (char *p = overrides_start; p < overrides_end; p++)
           if (*p == '\n')
@@ -65,11 +66,25 @@ static const char *get_overridden_filename(const char *filename) {
   return filename;
 }
 
+static int copy_path(char *dst, size_t dst_size, const char *src) {
+  if (strlen(src) >= dst_size)
+    return -1;
+  strcpy(dst, src);
+  return 0;
+}
+
 long find_and_get_size_of_file(const char *filename, char *found_path) {
   char full_path[256];
   struct stat st;
 
   filename = get_overridden_filename(filename);
+  if (filename[0] == '/') {
+    if (stat(filename, &st) == 0 && copy_path(found_path, 256, filename) == 0) {
+      notify("File '%s' found by absolute override\n", filename);
+      return st.st_size;
+    }
+    return -1;
+  }
   int num_paths = sizeof(file_paths) / sizeof(file_paths[0]);
 
   for (int i = 0; i < num_paths; i++) {
@@ -77,7 +92,8 @@ long find_and_get_size_of_file(const char *filename, char *found_path) {
 
     if (stat(full_path, &st) == 0) {
       notify("File '%s' found in '%s'\n", filename, file_paths[i]);
-      strcpy(found_path, full_path);
+      if (copy_path(found_path, 256, full_path) != 0)
+        return -1;
       return st.st_size;
     }
   }
@@ -90,6 +106,13 @@ int find_and_read_file(const char *filename, void *buf, size_t bufsize) {
   struct stat st;
 
   filename = get_overridden_filename(filename);
+  if (filename[0] == '/') {
+    if (stat(filename, &st) == 0) {
+      notify("File '%s' found by absolute override\n", filename);
+      return read_file(filename, buf, bufsize);
+    }
+    return -1;
+  }
   int num_paths = sizeof(file_paths) / sizeof(file_paths[0]);
 
   for (int i = 0; i < num_paths; i++) {
@@ -359,7 +382,7 @@ int fetch_freebsd(struct freebsd_info *info) {
   info->env_size = env_size;
   info->modulep = ALIGN_UP(info->last_pa, FREEBSD_X86_PAGE_SIZE);
   info->kernend_pa = ALIGN_UP(info->modulep + FREEBSD_METADATA_MAX +
-                                  info->env_size,
+                                  info->env_size + 1,
                               FREEBSD_X86_PAGE_SIZE);
   if (info->modulep > UINT32_MAX || info->kernend_pa > UINT32_MAX) {
     notify("FreeBSD kernel plus metadata does not fit below 4GB - Aborting\n");
