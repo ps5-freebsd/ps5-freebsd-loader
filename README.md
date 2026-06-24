@@ -51,6 +51,30 @@ make -C shellcode_kernel
 The shellcode Makefiles use `xxd` when available and fall back to `od`/`awk`
 for generated C headers.
 
+### Docker SDK Image
+
+The release workflow uses the prebuilt SDK image:
+
+```sh
+docker run --rm \
+  -v "$PWD:/src" \
+  -w /src \
+  -e PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk \
+  ps5freebsd/ps5-payload-sdk:clang18 \
+  sh -lc 'make clean all'
+```
+
+To rebuild and publish that image:
+
+```sh
+docker buildx build --platform linux/amd64 \
+  -t ps5freebsd/ps5-payload-sdk:clang18 \
+  docker/ps5-payload-sdk \
+  --load
+
+docker push ps5freebsd/ps5-payload-sdk:clang18
+```
+
 ## Boot Notes
 
 Supported firmware and rest-mode setup requirements are inherited from the

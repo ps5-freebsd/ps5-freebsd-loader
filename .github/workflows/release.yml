@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     name: Build PS5 FreeBSD loader
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Check out repository
@@ -26,7 +26,7 @@ jobs:
             -w /work \
             -e PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk \
             ps5freebsd/ps5-payload-sdk:clang18 \
-            sh -lc 'apt-get update && apt-get install -y --no-install-recommends gcc-x86-64-linux-gnu binutils-x86-64-linux-gnu libc6-dev-amd64-cross xxd && make clean all'
+            sh -lc 'make clean all'
 
       - name: Upload loader artifact
         uses: actions/upload-artifact@v4
