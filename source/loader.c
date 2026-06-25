@@ -3,6 +3,7 @@
 #include "firmware.h"
 #include "freebsd.h"
 #include "utils.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -144,6 +145,22 @@ void trim_newline(char *s) {
     }
     s++;
   }
+}
+
+static int parse_vram_size(const char *s, size_t *vram_size) {
+  char *end = NULL;
+  unsigned long long value;
+
+  errno = 0;
+  value = strtoull(s, &end, 16);
+  while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
+    end++;
+  if (errno != 0 || end == s || *end != '\0' || value == 0 ||
+      (size_t)value != value)
+    return -1;
+
+  *vram_size = (size_t)value;
+  return 0;
 }
 
 static uint64_t freebsd_phdr_pa(const Elf64_Phdr *phdr) {
@@ -350,8 +367,7 @@ int fetch_freebsd(struct freebsd_info *info) {
     vram_size = VRAM_SIZE;
   } else {
     trim_newline(buf_vram);
-    vram_size = strtoull(buf_vram, NULL, 16);
-    if (vram_size == 0) {
+    if (parse_vram_size(buf_vram, &vram_size) != 0) {
       printf("Seems like the configured vram value is wrong - Using static "
              "fallback\n");
       vram_size = VRAM_SIZE;
