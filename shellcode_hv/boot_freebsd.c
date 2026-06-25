@@ -19,6 +19,9 @@ static struct range work_ranges[FREEBSD_SMAP_MAX];
 static int smap_count;
 static int reserved_count;
 
+#define VRAM_MARKER_BYTES (16ULL * 1024ULL * 1024ULL)
+#define VRAM_MARKER_BAR_BYTES (1024ULL * 1024ULL)
+
 static void configure_vram(uint64_t fb_start, uint64_t vram_start,
                            uint64_t vram_size) {
   uint64_t vram_end = vram_start + vram_size - 1;
@@ -51,6 +54,40 @@ static void configure_vram(uint64_t fb_start, uint64_t vram_start,
       vram_start >> 12;
   *(uint32_t *)(AMDGPU_MMIO_BASE + DCHUBBUB_WHITELIST_TOP_ADDR_0) =
       vram_end >> 12;
+}
+
+static uint32_t marker_color(uint64_t offset, uint32_t stage_color) {
+  switch ((offset / VRAM_MARKER_BAR_BYTES) & 7) {
+  case 0:
+  case 1:
+  case 2:
+  case 3:
+    return stage_color;
+  case 4:
+    return 0x00ff0000U;
+  case 5:
+    return 0x0000ff00U;
+  case 6:
+    return 0x000000ffU;
+  default:
+    return 0x00ffffffU;
+  }
+}
+
+static void paint_vram_marker(uint32_t stage_color) {
+  if (info.vram_size < sizeof(uint32_t))
+    return;
+
+  uint64_t bytes = info.vram_size;
+  if (bytes > VRAM_MARKER_BYTES)
+    bytes = VRAM_MARKER_BYTES;
+  bytes &= ~(uint64_t)(sizeof(uint32_t) - 1);
+
+  volatile uint32_t *fb = (volatile uint32_t *)VRAM_BASE;
+  for (uint64_t offset = 0; offset < bytes; offset += sizeof(uint32_t)) {
+    fb[offset / sizeof(uint32_t)] = marker_color(offset, stage_color);
+  }
+  __asm__ volatile("mfence" : : : "memory");
 }
 
 static uint64_t freebsd_phdr_pa(const Elf64_Phdr *phdr) {
@@ -298,6 +335,7 @@ __attribute__((noreturn)) static void enter_freebsd(void) {
   uint64_t modulep = (uint64_t)(uint32_t)info.modulep << 32;
   uint64_t kernend = (uint64_t)(uint32_t)info.kernend;
 
+  paint_vram_marker(0x0000ff00U);
   printf("[freebsd] final handoff\n");
   print_hex64((const uint8_t *)"[freebsd] entry=", info.entry);
   print_hex64((const uint8_t *)"[freebsd] cr3=", FREEBSD_PT_BASE);
@@ -368,6 +406,7 @@ void entry(void) {
   memcpy(&info, (void *)(cave_freebsd_info), sizeof(struct freebsd_info));
 
   configure_vram(FB_BASE, VRAM_BASE, info.vram_size);
+  paint_vram_marker(0x00ff0000U);
 
   printf("[*] Booting FreeBSD in bare metal...\n");
   print_hex64((const uint8_t *)"[freebsd] kernel=", info.kernel);

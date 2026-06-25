@@ -837,6 +837,17 @@ The HV shellcode now emits UART breadcrumbs for the final direct handoff:
 - bootstrap page-table build
 - final `entry`, `cr3`, `stack`, `modulep`, and `kernend` before `retq`
 
+For no-UART hardware checks, the HV identity map also covers the expected PS5
+VRAM aperture and paints a best-effort HDMI marker:
+
+- marker after VRAM programming: post-resume HV path reached FreeBSD handoff
+  setup
+- marker immediately before the final `retq`: loader reached the direct
+  FreeBSD `btext` entry path
+
+This is only a handoff-progress signal. A black screen can still mean the
+existing display scanout is not reading the painted VRAM region.
+
 Still needed:
 
 - hardware confirmation of the exact runtime SMAP list on each target class

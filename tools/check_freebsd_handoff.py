@@ -68,6 +68,7 @@ PG_PS = 0x080
 PTE_ADDR_MASK = 0x000FFFFFFFFFF000
 PDE_2M_ADDR_MASK = 0x000FFFFFFFE00000
 X86_2M_PAGE_SIZE = 0x200000
+X86_1G_PAGE_SIZE = 0x40000000
 
 KERNEL_NAME = b"/PS5/FreeBSD/kernel\0"
 KERNEL_TYPE = b"elf kernel\0"
@@ -438,6 +439,28 @@ def translate_bootstrap_va(tables: dict[int, list[int]], va: int) -> int | None:
     return (pde & PDE_2M_ADDR_MASK) + (va & (X86_2M_PAGE_SIZE - 1))
 
 
+def build_hv_identity_l3() -> list[int]:
+    """Mirror shellcode_kernel/boot_freebsd.c HV identity map construction."""
+    l3 = [0] * 512
+    for gb in range(5):
+        l3[gb] = gb * X86_1G_PAGE_SIZE | PG_V | PG_RW | PG_PS
+    for gb in range(12, 18):
+        l3[gb] = gb * X86_1G_PAGE_SIZE | PG_V | PG_RW | PG_PS
+    return l3
+
+
+def translate_hv_identity_va(l3: list[int], va: int) -> int | None:
+    if ((va >> 39) & 0x1FF) != 0:
+        return None
+
+    entry = l3[(va >> 30) & 0x1FF]
+    if (entry & PG_V) == 0:
+        return None
+    if (entry & PG_PS) == 0:
+        raise ValueError("HV identity mapping unexpectedly uses lower tables")
+    return (entry & ~(X86_1G_PAGE_SIZE - 1)) + (va & (X86_1G_PAGE_SIZE - 1))
+
+
 def make_test_kernel(**overrides: int | bytes) -> bytes:
     ident = bytearray(b"\x7fELF" + b"\0" * (ELF_NIDENT - 4))
     ident[EI_CLASS] = ELFCLASS64
@@ -534,6 +557,14 @@ def run_self_tests() -> int:
     assert translate_bootstrap_va(tables, KERNBASE) == 0
     assert translate_bootstrap_va(tables, KERNSTART) == KERNLOAD
     assert translate_bootstrap_va(tables, KERNBASE + 0x7FFFFFFF) == 0x7FFFFFFF
+
+    hv_l3 = build_hv_identity_l3()
+    assert translate_hv_identity_va(hv_l3, 0) == 0
+    assert translate_hv_identity_va(hv_l3, 0x13FFFFFFF) == 0x13FFFFFFF
+    assert translate_hv_identity_va(hv_l3, 0x140000000) is None
+    assert translate_hv_identity_va(hv_l3, vram_base) == vram_base
+    assert translate_hv_identity_va(hv_l3, VRAM_TOP - 1) == VRAM_TOP - 1
+    assert translate_hv_identity_va(hv_l3, 0x480000000) is None
 
     bad_ident = bytearray(b"BAD!" + b"\0" * (ELF_NIDENT - 4))
     bad_ident[EI_CLASS] = ELFCLASS64

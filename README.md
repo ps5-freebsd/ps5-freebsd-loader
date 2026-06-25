@@ -85,6 +85,17 @@ original PS5 HV-defeat loader:
 - Rest Mode USB power must be set to `Always`.
 - HDMI Device Link should be disabled.
 
+For no-UART hardware checks, the HV FreeBSD path paints a best-effort HDMI
+marker into the first 16 MiB of the configured VRAM aperture:
+
+- color/bar marker after VRAM programming means the post-resume HV path started
+  the FreeBSD handoff;
+- a second marker immediately before the final FreeBSD entry jump means the
+  loader reached the direct `btext` handoff.
+
+The marker depends on the existing PS5 display scanout still reading that VRAM
+region. If the screen stays black, it does not by itself prove the loader failed.
+
 This is a staged FreeBSD bring-up branch. The loader-side handoff is present,
 but a matching FreeBSD kernel still needs PS5 platform support and drivers for
 full hardware parity.

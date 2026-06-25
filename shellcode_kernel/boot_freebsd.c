@@ -72,19 +72,23 @@ static void install_hv_code(void) {
   uint64_t identity_cr3 = cave_hv_paging;
   uint64_t identity_pml4_0 = identity_cr3 + 0x1003ULL;
   uint64_t l40_l3_addr = PAGE_PA(identity_pml4_0); // addr PML4[0]
-  uint64_t identity_pml40_l3[] = {
-      0x0000000000000083, // P, RW, US=0 - 0 GB to 1 GB
-      0x0000000040000083, // P, RW, US=0 - 1 GB to 2 GB
-      0x0000000080000083, // P, RW, US=0 - 3 GB to 3 GB
-      0x00000000C0000083, // P, RW, US=0 - 4 GB to 4 GB
-      0x0000000100000083  // P, RW, US=0 - 5 GB to 6 GB --> Our paging structure
-  };
-  uint64_t l3_size = sizeof(identity_pml40_l3) / sizeof(identity_pml40_l3[0]);
 
   // Create the map in memory
+  for (uint64_t i = 0; i < 512; i++) {
+    *(uint64_t *)PHYS_TO_DMAP(identity_cr3 + i * 8) = 0;
+    *(uint64_t *)PHYS_TO_DMAP(l40_l3_addr + i * 8) = 0;
+  }
   *(uint64_t *)PHYS_TO_DMAP(identity_cr3) = identity_pml4_0;
-  for (uint64_t i = 0; i < l3_size; i++) {
-    *(uint64_t *)PHYS_TO_DMAP(l40_l3_addr + i * 8) = identity_pml40_l3[i];
+
+  for (uint64_t gb = 0; gb < 5; gb++) {
+    *(uint64_t *)PHYS_TO_DMAP(l40_l3_addr + gb * 8) =
+        gb * 0x40000000ULL | 0x83ULL;
+  }
+
+  // Also map the expected PS5 VRAM aperture for HV-side screen markers.
+  for (uint64_t gb = 12; gb < 18; gb++) {
+    *(uint64_t *)PHYS_TO_DMAP(l40_l3_addr + gb * 8) =
+        gb * 0x40000000ULL | 0x83ULL;
   }
 
   // Install shellcode_hv
