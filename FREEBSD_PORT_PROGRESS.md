@@ -339,6 +339,8 @@ Current shape:
   - splash
   - parallel port stack
   - `puc`
+- enabled PS5 console path:
+  - `device vt_ps5fb`
 - disabled legacy hints:
   - `hint.atkbdc.0.disabled=1`
   - `hint.atrtc.0.disabled=1`
@@ -362,6 +364,40 @@ Changed `sys/conf/options.amd64`:
 Changed `sys/conf/files.amd64`:
 
 - added `x86/x86/ps5_machdep.c optional x86_ps5`
+- added `dev/vt/hw/ps5fb/ps5fb.c optional x86_ps5 vt_ps5fb`
+
+### Early Framebuffer Console
+
+Added `sys/dev/vt/hw/ps5fb/ps5fb.c`.
+
+Current behavior:
+
+- Registers a `vt(4)` framebuffer backend named `ps5fb`.
+- Probes only when `hw.ps5.platform=1` and `hw.ps5.fb.enabled` is not `0`.
+- Defaults to the loader's current PS5 VRAM assumptions:
+  - VRAM top: `0x470000000`
+  - VRAM size: `hw.ps5.vram_size`, default `512M`
+  - framebuffer base: `hw.ps5.fb.paddr`, default `VRAM top - VRAM size`
+  - mode: `1920x1080x32`
+  - stride: `7680`
+- Maps the framebuffer with write-combining memory attributes when available.
+- Uses normal `vt_fb` drawing, ioctl, mmap, suspend, and resume handlers.
+
+Validation completed:
+
+- `buildkernel KERNCONF=PS5` compiled `ps5fb.o` with `-Werror`.
+- PS5 kernel linked and installed in the FreeBSD root.
+- `ps5-freebsd-image` packaged successfully from the validated FreeBSD root.
+- Loader preflight passed against `output/ps5-freebsd.img`.
+
+Still needed:
+
+- Hardware confirmation that the existing PS5 HDMI scanout reads the expected
+  VRAM location.
+- Hardware confirmation that `vt_ps5fb` becomes the active console after the
+  kernel reaches vt initialization.
+- Resolution/stride/base adjustment if firmware leaves a different scanout
+  surface active.
 
 ### Initial Platform Glue
 
@@ -848,12 +884,20 @@ VRAM aperture and paints a best-effort HDMI marker:
 This is only a handoff-progress signal. A black screen can still mean the
 existing display scanout is not reading the painted VRAM region.
 
+FreeBSD now also has a `vt_ps5fb` framebuffer console path. If the firmware
+scanout is still pointed at the expected VRAM surface, the first useful
+hardware-visible signal after loader handoff should be the FreeBSD vt console.
+The loader marker remains useful because it separates "loader reached direct
+handoff" from "kernel reached console initialization."
+
 Still needed:
 
 - hardware confirmation of the exact runtime SMAP list on each target class
   and firmware range
 - hardware confirmation that the CPU actually enters FreeBSD with those page
   tables active
+- hardware confirmation that HDMI displays the `vt_ps5fb` console after kernel
+  console initialization
 
 ### 3. First Hardware Milestone
 
@@ -899,7 +943,8 @@ Replace `ps5_machdep.c` placeholders with real platform behavior:
 - Add fixed TSC fallback and calibration policy if PS5 firmware state does not
   provide what FreeBSD expects.
 - Add PS5-specific reboot, poweroff, and rest-mode hooks.
-- Add early debug console path.
+- Extend early debug visibility before `vt_ps5fb`, especially around `btext`
+  and `hammer_time()`.
 - Add a durable platform data structure populated from loader metadata or kenv.
 - Add PS5 memory reservation registration that survives beyond early SMAP
   parsing.
@@ -1001,7 +1046,7 @@ Keep accelerated graphics outside FreeBSD base:
   - platform detection
 - Validate in stages:
   - HDMI stays lit through boot
-  - framebuffer console path
+  - framebuffer console path (`vt_ps5fb` added; needs hardware validation)
   - drm-kmod attach
   - modeset
   - acceleration
