@@ -527,6 +527,8 @@ make check-freebsd-handoff \
   FREEBSD_KERNEL=/home/bizkut/ps5-freebsd-image/work/freebsd-root/boot/kernel/kernel \
   FREEBSD_KENV=/home/bizkut/ps5-freebsd-image/boot/freebsd/kenv.txt \
   FREEBSD_VRAM=/home/bizkut/ps5-freebsd-image/boot/freebsd/vram.txt
+make check-freebsd-preflight \
+  FREEBSD_IMAGE=/home/bizkut/ps5-freebsd-image/output/ps5-freebsd.img
 git diff --check
 ```
 
@@ -580,6 +582,36 @@ last_pa:       0x2200000
 modulep:       0x2200000
 kernend_pa:    0x2211000
 kernend:       0x2011000
+kenv_size:     155 bytes
+metadata_size: 1520 bytes
+```
+
+The host-side USB image checker validates the assembled image without mounting
+it:
+
+- primary GPT is readable
+- `PS5BOOT` is an EFI System partition
+- `ps5root` is a FreeBSD UFS partition
+- partitions do not overlap
+- FAT32 boot files exist at `/PS5/FreeBSD/`
+- the kernel extracted from the FAT32 partition passes the FreeBSD handoff
+  checks
+- image `kenv.txt` and `vram.txt` build a metadata block within loader limits
+
+Latest checked image:
+
+```text
+image:         /home/bizkut/ps5-freebsd-image/output/ps5-freebsd.img
+sha256:        2a6d700ae062fccc74bbcc7af0eeff9cbc76b7b8b6ea9f2321668eb95c0640e5
+boot:          PS5BOOT lba=2048-1023999 size=523239424
+root:          ps5root lba=1024000-16383966 size=7864303104
+kernel_size:   29381768 bytes
+entry:         0xffffffff80389000
+PT_LOAD:       5
+first_pa:      0x200000
+last_pa:       0x2200000
+modulep:       0x2200000
+vram_size:     0x20000000
 kenv_size:     155 bytes
 metadata_size: 1520 bytes
 ```
@@ -717,6 +749,8 @@ Added `tools/check_freebsd_handoff.py`, wired through:
 ```sh
 make check-freebsd-handoff-selftest
 make check-freebsd-handoff FREEBSD_KERNEL=/path/to/kernel
+make check-freebsd-image FREEBSD_IMAGE=/path/to/ps5-freebsd.img
+make check-freebsd-preflight FREEBSD_IMAGE=/path/to/ps5-freebsd.img
 ```
 
 It currently covers:
