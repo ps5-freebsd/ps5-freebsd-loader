@@ -1,6 +1,6 @@
 # PS5 FreeBSD Port Progress
 
-Status date: 2026-06-24
+Status date: 2026-06-25
 
 ## Goal
 
@@ -21,8 +21,8 @@ Multiboot2:
 
 ## Worktrees And Branches
 
-- Loader worktree: `/home/bizkut/ps5-linux-loader`
-- Loader branch: `freebsd-15`
+- Loader worktree: `/home/bizkut/ps5-freebsd-loader`
+- Loader branch: `main`
 - FreeBSD worktree: `/home/bizkut/freebsd-stable15`
 - FreeBSD branch: `ps5-freebsd-15`
 - Image builder worktree: `/home/bizkut/ps5-freebsd-image`
@@ -320,6 +320,7 @@ Current shape:
   - `nooptions EFIRT`
   - `nodevice efidev`
   - `nodevice efirtc`
+  - `nodevice smbios`
 - disabled legacy PC devices:
   - floppy
   - AT keyboard controller
@@ -429,8 +430,8 @@ It runs:
 make -C "$SRC" -j"$JOBS" TARGET=amd64 TARGET_ARCH=amd64 buildworld
 make -C "$SRC" -j"$JOBS" TARGET=amd64 TARGET_ARCH=amd64 KERNCONF=PS5 buildkernel
 make -C "$SRC" TARGET=amd64 TARGET_ARCH=amd64 DESTDIR="$DESTDIR" installworld
-make -C "$SRC" TARGET=amd64 TARGET_ARCH=amd64 KERNCONF=PS5 DESTDIR="$DESTDIR" installkernel
 make -C "$SRC" TARGET=amd64 TARGET_ARCH=amd64 DESTDIR="$DESTDIR" distribution
+make -C "$SRC" TARGET=amd64 TARGET_ARCH=amd64 KERNCONF=PS5 DESTDIR="$DESTDIR" installkernel
 ```
 
 Added `docker/freebsd-vm-builder/` and
@@ -445,7 +446,7 @@ The Docker+QEMU backend:
 - Forwards host/container TCP port `10022` to guest SSH port `22` by default.
 - Copies the FreeBSD source tree into the guest over SSH/tar.
 - Runs native FreeBSD `buildworld`, `buildkernel KERNCONF=PS5`,
-  `installworld`, `installkernel`, and `distribution` inside the guest.
+  `installworld`, `distribution`, and `installkernel` inside the guest.
 - Copies the resulting DESTDIR tarball back to `work/freebsd-root`.
 - Requires the selected FreeBSD VM user to have passwordless sudo for the make
   commands.
@@ -521,6 +522,11 @@ Passed:
 make -B -C shellcode_hv shellcode_hv.h
 make -B -C shellcode_kernel shellcode_kernel.h
 make PS5_PAYLOAD_SDK=/tmp/ps5-payload-sdk
+make check-freebsd-handoff-selftest
+make check-freebsd-handoff \
+  FREEBSD_KERNEL=/home/bizkut/ps5-freebsd-image/work/freebsd-root/boot/kernel/kernel \
+  FREEBSD_KENV=/home/bizkut/ps5-freebsd-image/boot/freebsd/kenv.txt \
+  FREEBSD_VRAM=/home/bizkut/ps5-freebsd-image/boot/freebsd/vram.txt
 git diff --check
 ```
 
@@ -545,6 +551,29 @@ bin/ps5-freebsd-loader.elf
 The resulting payload is a 64-bit x86-64 FreeBSD PIE executable and is not
 stripped.
 
+The host-side FreeBSD handoff checker validates the built PS5 kernel before a
+hardware boot attempt:
+
+- ELF64 amd64 `ET_EXEC` shape.
+- `PT_LOAD` file ranges and below-4GB physical placement.
+- first physical load at `0x200000`.
+- loader kenv formatting and size.
+- preload metadata record packing and size.
+
+Latest checked kernel:
+
+```text
+entry:         0xffffffff80389000
+PT_LOAD:       5
+first_pa:      0x200000
+last_pa:       0x2200000
+modulep:       0x2200000
+kernend_pa:    0x2211000
+kernend:       0x2011000
+kenv_size:     155 bytes
+metadata_size: 1520 bytes
+```
+
 ### FreeBSD Tree
 
 Passed:
@@ -562,20 +591,23 @@ Checked locally against FreeBSD source:
   `sys/amd64/amd64/machdep.c`
 - `md_copymodules()` record format in `stand/common/modinfo.c`
 
-FreeBSD kernel build was attempted with GNU make only:
+FreeBSD `buildworld`, `buildkernel KERNCONF=PS5`, `installworld`,
+`distribution`, and `installkernel` now complete inside a native FreeBSD 15.0
+QEMU VM driven by the image-builder QEMU backend.
 
-```sh
-make -C /home/bizkut/freebsd-stable15 -n buildkernel KERNCONF=PS5
-```
-
-It failed because GNU make cannot parse the FreeBSD BSD makefiles:
+The first kernel build failure was:
 
 ```text
-Makefile:127: *** missing separator.  Stop.
+ld: error: undefined symbol: active_efi_ops
 ```
 
-`bmake` and `config` are not installed in this environment, so a real
-`buildkernel KERNCONF=PS5` check remains pending.
+Root cause: `sys/amd64/conf/PS5` disabled `EFIRT`, `efidev`, and `efirtc`, but
+still inherited `device smbios` from `GENERIC`. FreeBSD `sys/x86/conf/NOTES`
+marks `smbios` as requiring `EFIRT`, so the PS5 kernel config now also has:
+
+```text
+nodevice smbios
+```
 
 ### Image Builder
 
@@ -599,17 +631,27 @@ Ubuntu package index:
 
 Not yet run:
 
-- `docker build` for the new FreeBSD helper images.
-- end-to-end `--distro freebsd --skip-freebsd-build` image assembly.
-- end-to-end `--distro freebsd --freebsd-build-backend qemu` build.
+- PS5 hardware boot test of `output/ps5-freebsd.img`.
 
-Those require either a prebuilt FreeBSD DESTDIR with a PS5 kernel, or a
-bootable FreeBSD QEMU image with SSH and passwordless sudo configured.
+Completed:
+
+- `docker build` for the FreeBSD QEMU helper image.
+- end-to-end `--distro freebsd --freebsd-build-backend qemu` build through
+  native FreeBSD `buildworld`/`buildkernel`/install.
+- recovery of the generated FreeBSD DESTDIR to `work/freebsd-root`.
+- `docker build` for the FreeBSD image assembler.
+- end-to-end `--distro freebsd --skip-freebsd-build` image assembly.
+
+Final artifact:
+
+```text
+output/ps5-freebsd.img
+size:   7.9G
+sha256: 2a6d700ae062fccc74bbcc7af0eeff9cbc76b7b8b6ea9f2321668eb95c0640e5
+```
 
 ## Known Technical Gaps
 
-- No FreeBSD PS5 kernel has been configured or compiled with FreeBSD build
-  tooling in this environment.
 - No PS5 hardware boot test has been run.
 - The FreeBSD base tree contains only initial platform scaffolding, not full
   PS5 platform support.
@@ -622,8 +664,7 @@ bootable FreeBSD QEMU image with SSH and passwordless sudo configured.
 - FreeBSD does not yet have PS5-specific PCI config routing, page-table NDA
   support, storage quirks, service drivers, network, Bluetooth, or graphics
   support.
-- The image builder has not yet been run end-to-end against a real PS5 FreeBSD
-  root tree or FreeBSD QEMU build VM.
+- The current image artifact has not yet been booted on PS5 hardware.
 
 ## Remaining Technical Plan
 
@@ -637,14 +678,7 @@ make PS5_PAYLOAD_SDK=/tmp/ps5-payload-sdk
 
 The loader currently builds with that SDK root.
 
-- Use the image-builder Docker+QEMU backend on Linux hosts, or build on a
-  native FreeBSD host.
-- Prepare a FreeBSD QEMU base image with:
-  - amd64 FreeBSD userland
-  - SSH enabled
-  - enough disk for `buildworld`, `buildkernel`, and DESTDIR output
-  - passwordless sudo for the build user
-- Run the Linux-host image-builder path:
+The Linux-host Docker+QEMU baseline is working. Rebuild it with:
 
 ```sh
 cd /home/bizkut/ps5-freebsd-image
@@ -656,23 +690,26 @@ cd /home/bizkut/ps5-freebsd-image
   --freebsd-vm-ssh-key ~/.ssh/freebsd-build
 ```
 
-- Or run directly on a native FreeBSD host:
+The equivalent native FreeBSD host path remains:
 
 ```sh
 cd /home/bizkut/freebsd-stable15
 make buildkernel KERNCONF=PS5
 ```
 
-- Fix first-order build errors from:
-  - invalid config lines
-  - missing includes
-  - SYSINIT ordering issues
-  - missing option headers
-  - unsupported device assumptions inherited from `GENERIC`
+- Keep fixing first-order build errors from unsupported device assumptions
+  inherited from `GENERIC` as new PS5-specific constraints are found.
 
 ### 2. Loader Test Harness
 
-Add host-side tests or small validation tools for:
+Added `tools/check_freebsd_handoff.py`, wired through:
+
+```sh
+make check-freebsd-handoff-selftest
+make check-freebsd-handoff FREEBSD_KERNEL=/path/to/kernel
+```
+
+It currently covers:
 
 - ELF reject cases:
   - wrong magic
@@ -696,6 +733,9 @@ Add host-side tests or small validation tools for:
   - `MODINFO_END` terminator present
   - `MODINFOMD_ENVP`, `KERNEND`, `MODULEP`, and `SMAP` records decode
     correctly
+
+Still needed:
+
 - SMAP generation:
   - TMR ranges are subtracted from RAM
   - VRAM is not reported usable
