@@ -88,12 +88,6 @@ static void install_hv_code(void) {
   }
 
   // Install shellcode_hv
-  if (shellcode_hv_bin_len > cave_hv_code_size) {
-    printf("HV shellcode too large\n");
-    while (1) {
-      halt();
-    }
-  }
   memcpy((void *)PHYS_TO_DMAP(cave_hv_code), shellcode_hv_bin,
          shellcode_hv_bin_len);
 }
@@ -131,6 +125,13 @@ void patch_hv(void) {
 }
 
 void boot_freebsd(void) {
+  if (shellcode_hv_bin_len > cave_hv_code_size) {
+    printf("HV shellcode too large\n");
+    while (1) {
+      halt();
+    }
+  }
+
   patch_hv();
 
   // Common bootloader code
