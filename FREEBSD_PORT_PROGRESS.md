@@ -559,6 +559,16 @@ hardware boot attempt:
 - first physical load at `0x200000`.
 - loader kenv formatting and size.
 - preload metadata record packing and size.
+- deterministic SMAP range splitting invariants:
+  - TMR ranges are subtracted from usable RAM
+  - VRAM is not reported usable
+  - loader page-table and trampoline stack ranges are not reported usable
+  - known ACPI ranges use the expected SMAP type
+- bootstrap page-table invariants:
+  - CR3 target is `FREEBSD_PT_BASE`
+  - low identity mappings cover the expected 0-5 GiB range
+  - `KERNSTART` maps to `FREEBSD_KERNLOAD`
+  - high `KERNBASE` mappings cover the initial 2 GiB kernel window
 
 Latest checked kernel:
 
@@ -733,9 +743,6 @@ It currently covers:
   - `MODINFO_END` terminator present
   - `MODINFOMD_ENVP`, `KERNEND`, `MODULEP`, and `SMAP` records decode
     correctly
-
-Still needed:
-
 - SMAP generation:
   - TMR ranges are subtracted from RAM
   - VRAM is not reported usable
@@ -746,6 +753,13 @@ Still needed:
   - `KERNSTART` maps to `FREEBSD_KERNLOAD`
   - low identity ranges cover all physical areas used before
     `pmap_bootstrap()`
+
+Still needed:
+
+- hardware confirmation of the exact runtime SMAP list on each target class
+  and firmware range
+- hardware confirmation that the CPU actually enters FreeBSD with those page
+  tables active
 
 ### 3. First Hardware Milestone
 
