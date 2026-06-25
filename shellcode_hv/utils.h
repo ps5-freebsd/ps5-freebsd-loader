@@ -5,6 +5,7 @@
 
 uint32_t putc_uart(uint8_t tx_byte);
 int printf(const uint8_t *msg);
+void print_hex64(const uint8_t *label, uint64_t value);
 
 void memcpy(void *dest, void *src, uint64_t len);
 char *strcpy(char *dest, const char *src);

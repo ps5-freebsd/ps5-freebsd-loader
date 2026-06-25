@@ -19,7 +19,6 @@ __attribute__((noinline, optimize("O0"))) uint32_t putc_uart(uint8_t tx_byte) {
 }
 
 __attribute__((noinline, optimize("O0"))) int printf(const uint8_t *msg) {
-  uint32_t max = 255;
   int ret = 0;
 
   for (int i = 0; i < 255; i++) {
@@ -33,6 +32,18 @@ __attribute__((noinline, optimize("O0"))) int printf(const uint8_t *msg) {
   }
 
   return ret;
+}
+
+__attribute__((noinline, optimize("O0"))) void print_hex64(const uint8_t *label,
+                                                           uint64_t value) {
+  static const uint8_t hex[] = "0123456789abcdef";
+
+  printf(label);
+  printf((const uint8_t *)"0x");
+  for (int i = 15; i >= 0; i--) {
+    putc_uart(hex[(value >> (i * 4)) & 0xf]);
+  }
+  printf((const uint8_t *)"\n");
 }
 
 __attribute__((noinline, optimize("O0"))) void memcpy(void *dest, void *src,

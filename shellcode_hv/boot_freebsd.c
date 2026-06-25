@@ -298,6 +298,13 @@ __attribute__((noreturn)) static void enter_freebsd(void) {
   uint64_t modulep = (uint64_t)(uint32_t)info.modulep << 32;
   uint64_t kernend = (uint64_t)(uint32_t)info.kernend;
 
+  printf("[freebsd] final handoff\n");
+  print_hex64((const uint8_t *)"[freebsd] entry=", info.entry);
+  print_hex64((const uint8_t *)"[freebsd] cr3=", FREEBSD_PT_BASE);
+  print_hex64((const uint8_t *)"[freebsd] stack=", FREEBSD_TRAMP_STACK);
+  print_hex64((const uint8_t *)"[freebsd] modulep=", info.modulep);
+  print_hex64((const uint8_t *)"[freebsd] kernend=", info.kernend);
+
   __asm__ volatile("movq %[stack], %%rsp\n\t"
                    "pushq %[kernend]\n\t"
                    "pushq %[modulep]\n\t"
@@ -313,11 +320,17 @@ __attribute__((noreturn)) static void enter_freebsd(void) {
 }
 
 void boot_freebsd(void) {
+  printf("[freebsd] load kernel segments\n");
   load_kernel_segments();
+  printf("[freebsd] copy kenv\n");
   memcpy((void *)(info.modulep + FREEBSD_METADATA_MAX), (void *)info.env,
          info.env_size + 1);
+  printf("[freebsd] build metadata\n");
   build_metadata();
+  print_hex64((const uint8_t *)"[freebsd] smap_count=", smap_count);
+  printf("[freebsd] build page tables\n");
   build_freebsd_page_tables();
+  printf("[freebsd] enter btext\n");
   enter_freebsd();
 }
 
@@ -357,5 +370,13 @@ void entry(void) {
   configure_vram(FB_BASE, VRAM_BASE, info.vram_size);
 
   printf("[*] Booting FreeBSD in bare metal...\n");
+  print_hex64((const uint8_t *)"[freebsd] kernel=", info.kernel);
+  print_hex64((const uint8_t *)"[freebsd] kernel_size=", info.kernel_size);
+  print_hex64((const uint8_t *)"[freebsd] env=", info.env);
+  print_hex64((const uint8_t *)"[freebsd] env_size=", info.env_size);
+  print_hex64((const uint8_t *)"[freebsd] first_pa=", info.first_pa);
+  print_hex64((const uint8_t *)"[freebsd] last_pa=", info.last_pa);
+  print_hex64((const uint8_t *)"[freebsd] vram_size=", info.vram_size);
+  print_hex64((const uint8_t *)"[freebsd] n_tmrs=", info.n_tmrs);
   boot_freebsd();
 }

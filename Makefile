@@ -1,10 +1,10 @@
-.PHONY: all check-freebsd-handoff check-freebsd-handoff-selftest check-freebsd-image check-freebsd-preflight clean
+.PHONY: all check-freebsd-handoff check-freebsd-handoff-selftest check-freebsd-image check-freebsd-preflight check-shellcode-layout clean
 
 ifndef PS5_PAYLOAD_SDK
     PS5_PAYLOAD_SDK = /opt/ps5-payload-sdk/
 endif
 
-HOST_CHECK_GOALS := check-freebsd-handoff check-freebsd-handoff-selftest check-freebsd-image check-freebsd-preflight
+HOST_CHECK_GOALS := check-freebsd-handoff check-freebsd-handoff-selftest check-freebsd-image check-freebsd-preflight check-shellcode-layout
 NON_HOST_GOALS := $(filter-out $(HOST_CHECK_GOALS),$(MAKECMDGOALS))
 ifeq ($(MAKECMDGOALS),)
 include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
@@ -39,7 +39,11 @@ ifndef FREEBSD_IMAGE
 endif
 	python3 tools/check_freebsd_usb_image.py "$(FREEBSD_IMAGE)"
 
-check-freebsd-preflight: check-freebsd-handoff-selftest check-freebsd-image
+check-shellcode-layout:
+	$(MAKE) -B -C shellcode_hv shellcode_hv.h
+	python3 tools/check_shellcode_layout.py
+
+check-freebsd-preflight: check-freebsd-handoff-selftest check-shellcode-layout check-freebsd-image
 
 $(SC_HV_H):
 	$(MAKE) -C shellcode_hv

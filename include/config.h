@@ -6,10 +6,11 @@
 // This is used to allocate resources for HV shellcode and FreeBSD boot
 #define cave 0x100000000ULL
 #define cave_hv_paging cave
-#define cave_hv_code                                                           \
-  cave_hv_paging + 0x3000ULL // Leave space for 3 pages but we only use 2 for
-                             // 1GB 1:1 mapping
-#define cave_freebsd_files cave_hv_code + 0x2000ULL
+#define cave_hv_paging_size 0x3000ULL // Leave space for 3 pages but we only
+                                      // use 2 for 1GB 1:1 mapping
+#define cave_hv_code cave_hv_paging + cave_hv_paging_size
+#define cave_hv_code_size 0x8000ULL
+#define cave_freebsd_files cave_hv_code + cave_hv_code_size
 #define cave_freebsd_info cave_freebsd_files
 #define cave_freebsd_kernel cave_freebsd_info + PAGE_SIZE
 // #define cave_freebsd_env     // Allocated dynamically after kernel

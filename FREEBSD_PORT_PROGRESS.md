@@ -142,11 +142,18 @@ HV-side final staging:
 
 - `cave = 0x100000000`
 - `cave_hv_paging = cave`
-- `cave_hv_code = cave_hv_paging + 0x3000`
-- `cave_freebsd_files = cave_hv_code + 0x2000`
+- `cave_hv_paging_size = 0x3000`
+- `cave_hv_code = cave_hv_paging + cave_hv_paging_size`
+- `cave_hv_code_size = 0x8000`
+- `cave_freebsd_files = cave_hv_code + cave_hv_code_size`
 - `cave_freebsd_info = cave_freebsd_files`
 - `cave_freebsd_kernel = cave_freebsd_info + PAGE_SIZE`
 - final env starts after the aligned kernel image
+
+Kernel shellcode checks `shellcode_hv_bin_len <= cave_hv_code_size` before
+copying the HV shellcode. If future HV shellcode growth would overlap the
+FreeBSD staging area, the loader now prints `HV shellcode too large` and halts
+instead of corrupting staged FreeBSD data.
 
 Note that `PAGE_SIZE` in the loader config is `0x4000`, matching the PS5
 payload/kernel mapping granularity used by the existing loader, while FreeBSD
@@ -527,6 +534,7 @@ make check-freebsd-handoff \
   FREEBSD_KERNEL=/home/bizkut/ps5-freebsd-image/work/freebsd-root/boot/kernel/kernel \
   FREEBSD_KENV=/home/bizkut/ps5-freebsd-image/boot/freebsd/kenv.txt \
   FREEBSD_VRAM=/home/bizkut/ps5-freebsd-image/boot/freebsd/vram.txt
+make check-shellcode-layout
 make check-freebsd-preflight \
   FREEBSD_IMAGE=/home/bizkut/ps5-freebsd-image/output/ps5-freebsd.img
 git diff --check
@@ -548,10 +556,18 @@ Build output:
 
 ```text
 bin/ps5-freebsd-loader.elf
+size: 166184 bytes
 ```
 
 The resulting payload is a 64-bit x86-64 FreeBSD PIE executable and is not
 stripped.
+
+Latest shellcode sizes:
+
+```text
+shellcode_hv/shellcode_hv.bin:         13160 bytes
+shellcode_kernel/shellcode_kernel.bin: 28040 bytes
+```
 
 The host-side FreeBSD handoff checker validates the built PS5 kernel before a
 hardware boot attempt:
@@ -584,6 +600,25 @@ kernend_pa:    0x2211000
 kernend:       0x2011000
 kenv_size:     155 bytes
 metadata_size: 1520 bytes
+```
+
+The host-side shellcode layout checker validates generated shellcode sizes
+against the fixed staging layout:
+
+- rebuilds the HV shellcode before measuring it
+- confirms `shellcode_hv.bin` fits within `cave_hv_code_size`
+- confirms the HV shellcode region does not overlap the FreeBSD staging base
+
+Latest checked shellcode layout:
+
+```text
+hv_bin:        shellcode_hv/shellcode_hv.bin
+hv_bin_size:   13160 bytes
+hv_paging:     0x100000000
+hv_paging_sz:  0x3000
+hv_code:       0x100003000
+hv_code_size:  0x8000
+freebsd_files: 0x10000b000
 ```
 
 The host-side USB image checker validates the assembled image without mounting
@@ -749,6 +784,7 @@ Added `tools/check_freebsd_handoff.py`, wired through:
 ```sh
 make check-freebsd-handoff-selftest
 make check-freebsd-handoff FREEBSD_KERNEL=/path/to/kernel
+make check-shellcode-layout
 make check-freebsd-image FREEBSD_IMAGE=/path/to/ps5-freebsd.img
 make check-freebsd-preflight FREEBSD_IMAGE=/path/to/ps5-freebsd.img
 ```
@@ -787,6 +823,19 @@ It currently covers:
   - `KERNSTART` maps to `FREEBSD_KERNLOAD`
   - low identity ranges cover all physical areas used before
     `pmap_bootstrap()`
+- shellcode staging layout:
+  - generated HV shellcode fits inside the reserved HV code slot
+  - FreeBSD staging starts after the complete reserved HV code area
+
+The HV shellcode now emits UART breadcrumbs for the final direct handoff:
+
+- staged kernel, env, physical load, VRAM, and TMR counts
+- kernel segment copy
+- kenv copy
+- metadata build
+- SMAP count
+- bootstrap page-table build
+- final `entry`, `cr3`, `stack`, `modulep`, and `kernend` before `retq`
 
 Still needed:
 
@@ -801,7 +850,6 @@ Target: prove the loader reaches FreeBSD `btext`.
 
 Tasks:
 
-- Add minimal UART-visible breadcrumbs before final `retq`.
 - Add early FreeBSD trace in `btext` or immediately after `hammer_time()`
   when practical.
 - Confirm:
